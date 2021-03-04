@@ -84,18 +84,18 @@ if __name__ == "__main__":
             header_complete = True
         
         (ret_status, gene_name, ret_row) = get_data_using_row(row)
+        curr_count += 1
         
         if ret_status == False:
-            print(f"Processing FAILED for #{curr_count+1}.")
-            continue
+            print(f"Processing FAILED for #{curr_count}.")
+            # rows.append(ret_row)
         elif ret_status is None:
             print("KeyboardInterrupt called.")
             exit(0)
         else: # ret_status == True
-            print(f"Processing (#{curr_count+1}) -- {row[18]} / {gene_name}")
+            print(f"Processing (#{curr_count}) -- {row[18]} / {gene_name}")
             rows.append(ret_row)
         
-        curr_count += 1
         if args.max_count != -1 and curr_count >= args.max_count:
             break
     
