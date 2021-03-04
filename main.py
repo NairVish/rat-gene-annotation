@@ -36,7 +36,7 @@ def get_data_using_row(row: List[Any]) -> Tuple[Optional[bool], str, List[Any]]:
 
             time.sleep(0.04)  # rate limit
 
-            GENE_FETCH_URL = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=gene&id={gid}&retmode=xml&api_key={API_KEY}"
+            GENE_FETCH_URL = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=gene&id={gid}&retmode=xml&api_key={args.api_key}"
             gene_fetch_results = requests.get(GENE_FETCH_URL).text
 
             soup = BeautifulSoup(gene_fetch_results, features='xml')
@@ -57,6 +57,7 @@ def get_data_using_row(row: List[Any]) -> Tuple[Optional[bool], str, List[Any]]:
         return (None, "", row)
     except Exception as e:
         row.append(f"No result ({e.__class__.__name__}).")
+        raise e
         return (False, "", row)
 
 
