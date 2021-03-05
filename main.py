@@ -90,6 +90,7 @@ if __name__ == "__main__":
     parser.add_argument('-o', '--output', action='store', type=str, required=True)
     parser.add_argument('-k', '--api_key', action='store', type=str, required=True)
     parser.add_argument('-c', '--max_count', action='store', type=int, default=-1)
+    parser.add_argument('-s', '--start', action='store', type=int, default=-1)
 
     args = parser.parse_args()
 
@@ -106,9 +107,13 @@ if __name__ == "__main__":
     rows = []
     curr_count = 0
 
-    for row in input_csv_data_reader:      
-        (ret_status, gene_name, ret_row) = get_data_using_row(row)
+    for row in input_csv_data_reader:
         curr_count += 1
+        if args.start != -1 and curr_count < args.start:
+            print(f"Skipping row #{curr_count}.")
+            continue
+
+        (ret_status, gene_name, ret_row) = get_data_using_row(row)
         
         if ret_status == False:
             print(f"Processing FAILED for #{curr_count}.")
