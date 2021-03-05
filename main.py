@@ -93,41 +93,37 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # read file and skip header
-    csv_file = open(args.input, 'r')
-    csv_data_reader = csv.reader(csv_file, delimiter=",")
-    csv_header = next(csv_data_reader)
+    # read input file and get header
+    input_csv_file = open(args.input, 'r')
+    input_csv_data_reader = csv.reader(input_csv_file, delimiter=",")
+    csv_header = next(input_csv_data_reader)  + ["Gene name", "Gene description", "Strand", "Gene type"]
+
+    # get output file ready
+    output_csv_file = open(args.output, "w", newline='')
+    output_csv_data_writer = csv.writer(output_csv_file, delimiter=',')
+    output_csv_data_writer.writerow(csv_header)
 
     rows = []
     curr_count = 0
-    header_complete = False
 
-    for row in csv_data_reader:
-        if not header_complete:
-            csv_header = csv_header + ["Gene name", "Gene description", "Strand", "Gene type"]
-            header_complete = True
-        
+    for row in input_csv_data_reader:      
         (ret_status, gene_name, ret_row) = get_data_using_row(row)
         curr_count += 1
         
         if ret_status == False:
             print(f"Processing FAILED for #{curr_count}.")
-            # rows.append(ret_row)
         elif ret_status is None:
             print("KeyboardInterrupt called.")
             exit(0)
         else: # ret_status == True
             print(f"Processing (#{curr_count}) -- {row[18]} / {gene_name}")
-            rows.append(ret_row)
+            
+        output_csv_data_writer.writerow(ret_row)
+        # output_csv_file.flush()
         
         if args.max_count != -1 and curr_count >= args.max_count:
             break
     
-    # close the input file
-    csv_file.close()
-
-    # write everything into the output file
-    with open(args.output, "w", newline='') as output_csv_file:
-        csv_writer = csv.writer(output_csv_file, delimiter=',')
-        csv_writer.writerow(csv_header)
-        csv_writer.writerows(rows)
+    # close the input and output files
+    input_csv_file.close()
+    output_csv_file.close()
