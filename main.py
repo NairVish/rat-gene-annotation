@@ -6,6 +6,62 @@ from sys import exit
 from typing import List, Optional, Tuple, Any
 from bs4 import BeautifulSoup
 
+
+def get_ensembl_data(transcript_id: str) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+    gene_name, gene_desc, gene_type, strand = None, None, None, None
+    transcript_id = transcript_id.split(".")[0]
+
+    FETCH_URL = f"https://rest.ensembl.org/lookup/id/{transcript_id}"
+    r = requests.get(FETCH_URL, headers={ "Content-Type" : "application/json"})
+    
+    try:
+        parent_id = r.json()["Parent"]
+    except KeyError:
+        return gene_name, gene_desc, gene_type, strand
+
+    FETCH_URL = f"https://rest.ensembl.org/lookup/id/{parent_id}"
+    r = requests.get(FETCH_URL, headers={ "Content-Type" : "application/json"})
+    j = r.json()
+
+    try:
+        gene_name = j["display_name"]
+        gene_desc = j["description"]
+        gene_type = j["biotype"]
+        strand = j["strand"]
+    except KeyError as e:
+        pass
+
+    return gene_name, gene_desc, gene_type, strand
+
+
+def get_genbank_data(transcript_id: str) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+    gene_name, gene_desc, gene_type, strand = None, None, None, None
+    ID_FETCH_URL = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?dbfrom=nuccore&db=gene&term={transcript_id}&retmode=json&api_key={args.api_key}"
+    id_json = requests.get(ID_FETCH_URL).json()
+
+    try:
+        gid = id_json["esearchresult"]["idlist"][0]
+    except (KeyError, IndexError):
+        return gene_name, gene_desc, gene_type, strand
+
+    time.sleep(0.04)  # rate limit
+
+    GENE_FETCH_URL = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=gene&id={gid}&retmode=xml&api_key={args.api_key}"
+    gene_fetch_results = requests.get(GENE_FETCH_URL).text
+
+    soup = BeautifulSoup(gene_fetch_results, features='xml')
+
+    try:
+        gene_name = soup.findAll("Gene-ref_locus")[0].get_text()
+        gene_desc = soup.findAll("Gene-ref_desc")[0].get_text()
+        gene_type = soup.findAll("Entrezgene_type")[0]["value"]
+        strand = soup.findAll("Na-strand")[0]["value"]
+    except (KeyError, IndexError) as e:
+        pass
+
+    return gene_name, gene_desc, gene_type, strand
+
+
 def get_data_using_row(row: List[Any]) -> Tuple[Optional[bool], str, List[Any]]:
     try:
         if " of " in row[12]:
@@ -13,51 +69,18 @@ def get_data_using_row(row: List[Any]) -> Tuple[Optional[bool], str, List[Any]]:
             del row[12]
 
         transcript_id = row[18]
-        if transcript_id.startswith("ENST"):
-            transcript_id = transcript_id.split(".")[0]
-            FETCH_URL = f"https://rest.ensembl.org/lookup/id/{transcript_id}"
-            r = requests.get(FETCH_URL, headers={ "Content-Type" : "application/json"})
-            parent_id = r.json()["Parent"]
 
-            FETCH_URL = f"https://rest.ensembl.org/lookup/id/{parent_id}"
-            r = requests.get(FETCH_URL, headers={ "Content-Type" : "application/json"})
-            j = r.json()
+        func = get_ensembl_data if transcript_id.startswith("ENST") else get_genbank_data
+        gene_name, gene_desc, gene_type, strand = func(transcript_id)
 
-            gene_name = j["display_name"]
-            gene_desc = j["description"]
-            gene_type = j["biotype"]
-            strand = j["strand"]
+        time.sleep(0.04) # rate limit
 
-        else: # transcript_id.startswith("NM_"):
-            ID_FETCH_URL = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?dbfrom=nuccore&db=gene&term={transcript_id}&retmode=json&api_key={args.api_key}"
-            id_json = requests.get(ID_FETCH_URL).json()
-            # print(id_json)
-            gid = id_json["esearchresult"]["idlist"][0]
-
-            time.sleep(0.04)  # rate limit
-
-            GENE_FETCH_URL = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=gene&id={gid}&retmode=xml&api_key={args.api_key}"
-            gene_fetch_results = requests.get(GENE_FETCH_URL).text
-
-            soup = BeautifulSoup(gene_fetch_results, features='xml')
-
-            gene_name = soup.findAll("Gene-ref_locus")[0].get_text()
-            gene_desc = soup.findAll("Gene-ref_desc")[0].get_text()
-            gene_type = soup.findAll("Entrezgene_type")[0]["value"]
-            strand = soup.findAll("Na-strand")[0]["value"]
-
-        time.sleep(0.04)
-        
-        row.append(gene_name)
-        row.append(gene_desc)
-        row.append(strand)
-        row.append(gene_type)
+        row += [gene_name, gene_desc, strand, gene_type]
         return (True, gene_name, row)
     except KeyboardInterrupt:
         return (None, "", row)
     except Exception as e:
-        row.append(f"No result ({e.__class__.__name__}).")
-        raise e
+        # row.append(f"No result.")
         return (False, "", row)
 
 
@@ -104,7 +127,7 @@ if __name__ == "__main__":
     csv_file.close()
 
     # write everything into the output file
-    with open(args.output, "w+") as output_csv_file:
+    with open(args.output, "w", newline='') as output_csv_file:
         csv_writer = csv.writer(output_csv_file, delimiter=',')
         csv_writer.writerow(csv_header)
         csv_writer.writerows(rows)
